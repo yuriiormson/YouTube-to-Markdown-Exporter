@@ -29,6 +29,29 @@
 - `match_filter`: Слово або фраза, яка обов'язково повинна бути в назві відео (наприклад, `Арестович LIVE`). Якщо залишити порожнім, шукатимуться всі відео.
 - `output_dir`: Папка, куди зберігатимуться згенеровані `.md` файли.
 - `db_path`: Шлях до файлу бази даних SQLite.
+- `cookies_path`: Необов'язковий шлях до `cookies.txt` для авторизованих запитів до YouTube. За замовчуванням `null`.
+- `proxy`: Необов'язковий HTTP/HTTPS proxy для обходу IP-блокування, якщо cookies не використовуються. За замовчуванням `null`.
+
+Приклад:
+```yaml
+cookies_path: null  # e.g. "/Users/me/cookies.txt"
+proxy: null  # e.g. "http://user:pass@host:port"
+```
+
+### Cookies для YouTube transcripts
+
+Якщо YouTube блокує запити з поточного IP, можна передати cookies з браузера:
+
+1. Встановіть Chrome extension [Get cookies.txt](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc).
+2. Увійдіть у YouTube у Chrome.
+3. Відкрийте `youtube.com`, натисніть іконку extension і експортуйте cookies у файл `cookies.txt`.
+4. Вкажіть абсолютний шлях до файлу в `config.yaml`:
+   ```yaml
+   cookies_path: "/Users/me/cookies.txt"
+   proxy: null
+   ```
+
+Файл `cookies.txt` містить дані сесії вашого акаунта, тому не додавайте його в git і не передавайте іншим людям.
 
 ## Використання
 

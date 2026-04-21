@@ -1,24 +1,25 @@
 from typing import Optional, List
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 class ProcessingConfig(BaseModel):
     delay_between_videos_sec: int = 5
 
 class AppConfig(BaseModel):
+    model_config = ConfigDict(extra='allow')
+
     channel_url: str
     filters: dict = Field(default_factory=dict)
     output_dir: str = "output/Arestovych_LIVE"
     db_path: str = "data/videos.db"
     languages: List[str] = Field(default_factory=lambda: ["ru", "uk", "en"])
+    cookies_path: Optional[str] = None
+    proxy: Optional[str] = None
     cookies_from_browser: str = "chrome"
     js_runtime: str = "node"
     retries: int = 5
     delay: int = 5
     processing: ProcessingConfig = Field(default_factory=ProcessingConfig)
-    
-    class Config:
-        extra = 'allow'
 
 class VideoMeta(BaseModel):
     video_id: str

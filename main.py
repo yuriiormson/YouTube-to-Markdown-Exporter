@@ -130,7 +130,7 @@ def main():
     db = Database(config.db_path)
     sync_db_with_files(db)
     
-    client = YTClient(config.dict())
+    client = YTClient(config.model_dump())
     parser = Parser()
     converter = Converter(config.output_dir)
 

@@ -1,9 +1,12 @@
 import os
+from http.cookiejar import MozillaCookieJar
 import yt_dlp
 from typing import List, Optional
 from models.data_models import VideoMeta
+from requests import Session
 from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import WebVTTFormatter
+from youtube_transcript_api.proxies import GenericProxyConfig
 
 def is_target_video(title: str, description: str, filters: dict, debug: bool = False) -> bool:
     title_lower = title.lower()
@@ -37,10 +40,31 @@ import time
 class YTClient:
     def __init__(self, config: dict):
         self.languages = config.get("languages", ["ru", "uk", "en"])
+        self.cookies_path = config.get("cookies_path")
+        self.proxy = config.get("proxy")
         self.cookies_from_browser = config.get("cookies_from_browser", "chrome")
         self.js_runtime = config.get("js_runtime", "node")
         self.retries = config.get("retries", 5)
         self.delay = config.get("delay", 5)
+
+    def _build_transcript_api(self) -> YouTubeTranscriptApi:
+        http_client = None
+        proxy_config = None
+
+        if self.cookies_path:
+            cookie_path = os.path.expanduser(self.cookies_path)
+            cookie_jar = MozillaCookieJar(cookie_path)
+            cookie_jar.load(ignore_discard=True, ignore_expires=True)
+            http_client = Session()
+            http_client.cookies = cookie_jar
+
+        if self.proxy:
+            proxy_config = GenericProxyConfig(https_url=self.proxy)
+
+        return YouTubeTranscriptApi(
+            proxy_config=proxy_config,
+            http_client=http_client,
+        )
 
     def _build_ydl_opts(self):
         return {
@@ -161,7 +185,7 @@ class YTClient:
 
     def download_subtitles(self, video_id: str, output_dir: str) -> Optional[str]:
         try:
-            api = YouTubeTranscriptApi()
+            api = self._build_transcript_api()
             transcript_list = api.list(video_id)
             print(f"[{video_id}] Available transcripts:", transcript_list)
             try:
