@@ -1,0 +1,5 @@
+yt-dlp>=2024.3.10
+webvtt-py>=0.4.6
+pydantic>=2.0.0
+PyYAML>=6.0.1
+youtube-transcript-api>=0.6.2
