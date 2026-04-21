@@ -162,27 +162,22 @@ class YTClient:
     def download_subtitles(self, video_id: str, output_dir: str) -> Optional[str]:
         try:
             api = YouTubeTranscriptApi()
-    
-            transcript_list = api.list_transcripts(video_id)
-    
+            transcript_list = api.list(video_id)
+            print(f"[{video_id}] Available transcripts:", transcript_list)
             try:
                 transcript = transcript_list.find_transcript(self.languages)
-            except:
+                print(f"[{video_id}] Using manual transcript")
+            except Exception:
                 transcript = transcript_list.find_generated_transcript(self.languages)
-    
+                print(f"[{video_id}] Using generated transcript")
             data = transcript.fetch()
-    
             formatter = WebVTTFormatter()
             vtt_formatted = formatter.format_transcript(data)
-    
             output_path = os.path.join(output_dir, f"{video_id}.vtt")
-    
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(vtt_formatted)
-    
             print(f"[{video_id}] ✅ Transcript loaded ({transcript.language_code})")
             return output_path
-    
         except Exception as e:
-            print(f"[{video_id}] ❌ Transcript error: {e}")
+            print(f"[{video_id}] ❌ Transcript error:", e)
             return None
