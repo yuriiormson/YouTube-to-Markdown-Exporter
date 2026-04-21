@@ -29,18 +29,29 @@
 - `match_filter`: Слово або фраза, яка обов'язково повинна бути в назві відео (наприклад, `Арестович LIVE`). Якщо залишити порожнім, шукатимуться всі відео.
 - `output_dir`: Папка, куди зберігатимуться згенеровані `.md` файли.
 - `db_path`: Шлях до файлу бази даних SQLite.
-- `cookies_path`: Необов'язковий шлях до `cookies.txt` для авторизованих запитів до YouTube. За замовчуванням `null`.
+- `cookies_path`: Необов'язковий шлях до `cookies.txt` для авторизованих запитів до YouTube. За замовчуванням `null`, тоді скрипт автоматично прочитає cookies з Chrome.
 - `proxy`: Необов'язковий HTTP/HTTPS proxy для обходу IP-блокування, якщо cookies не використовуються. За замовчуванням `null`.
 
 Приклад:
 ```yaml
-cookies_path: null  # e.g. "/Users/me/cookies.txt"
+cookies_path: null  # Leave null to read cookies from Chrome automatically
 proxy: null  # e.g. "http://user:pass@host:port"
 ```
 
-### Cookies для YouTube transcripts
+### Автоматична авторизація YouTube
 
-Якщо YouTube блокує запити з поточного IP, можна передати cookies з браузера:
+Якщо `cookies_path` порожній або файл не існує, скрипт автоматично прочитає cookies з вашого Chrome профілю через `yt-dlp`.
+
+1. Переконайтеся, що ви вже увійшли в YouTube у Google Chrome.
+2. Запустіть скрипт як зазвичай.
+3. `yt-dlp` прочитає cookies з Chrome напряму для завантаження метаданих.
+4. Для `youtube-transcript-api` скрипт створить тимчасовий Netscape `cookies.txt` з тих самих Chrome cookies.
+
+На macOS `yt-dlp` використовує стандартний Chrome профіль, зокрема cookies database на кшталт `~/Library/Application Support/Google/Chrome/Default/Cookies`.
+
+### Ручний cookies.txt
+
+Якщо потрібно вручну передати cookies з браузера:
 
 1. Встановіть Chrome extension [Get cookies.txt](https://chromewebstore.google.com/detail/get-cookiestxt-locally/cclelndahbckbenkjhflpdbgdldlbecc).
 2. Увійдіть у YouTube у Chrome.

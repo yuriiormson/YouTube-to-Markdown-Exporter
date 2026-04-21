@@ -1,4 +1,6 @@
 import os
+import tempfile
+import time
 from http.cookiejar import MozillaCookieJar
 import yt_dlp
 from typing import List, Optional
@@ -35,25 +37,66 @@ def is_target_video(title: str, description: str, filters: dict, debug: bool = F
 
     return is_target
 
-import time
-
 class YTClient:
     def __init__(self, config: dict):
         self.languages = config.get("languages", ["ru", "uk", "en"])
-        self.cookies_path = config.get("cookies_path")
         self.proxy = config.get("proxy")
         self.cookies_from_browser = config.get("cookies_from_browser", "chrome")
         self.js_runtime = config.get("js_runtime", "node")
         self.retries = config.get("retries", 5)
         self.delay = config.get("delay", 5)
+        self.use_browser_cookies = False
+        self.cookies_path = self._resolve_cookies_path(config.get("cookies_path"))
+
+    def _resolve_cookies_path(self, cookies_path: Optional[str]) -> Optional[str]:
+        if cookies_path:
+            expanded_path = os.path.expanduser(cookies_path)
+            if os.path.exists(expanded_path):
+                return expanded_path
+
+        self.use_browser_cookies = True
+        print("🔐 No valid cookies file found. Reading YouTube cookies from Chrome...")
+        cookies_path = self._extract_cookies_from_chrome()
+        print(f"Saved Chrome YouTube cookies to: {cookies_path}")
+        return cookies_path
+
+    def _extract_cookies_from_chrome(self) -> str:
+        from copy import copy
+        from yt_dlp.cookies import YoutubeDLCookieJar, extract_cookies_from_browser
+
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".txt")
+        tmp.close()
+
+        try:
+            browser_cookie_jar = extract_cookies_from_browser(self.cookies_from_browser)
+            youtube_cookie_jar = YoutubeDLCookieJar()
+
+            for cookie in browser_cookie_jar:
+                if "youtube.com" in cookie.domain:
+                    youtube_cookie_jar.set_cookie(copy(cookie))
+
+            if not any(cookie.name == "SSID" for cookie in youtube_cookie_jar):
+                print(
+                    "⚠️ Chrome cookies were extracted, but SSID was not found. "
+                    "Make sure Chrome is logged in to YouTube."
+                )
+
+            youtube_cookie_jar.save(
+                tmp.name,
+                ignore_discard=True,
+                ignore_expires=True,
+            )
+            return tmp.name
+        except Exception:
+            os.unlink(tmp.name)
+            raise
 
     def _build_transcript_api(self) -> YouTubeTranscriptApi:
         http_client = None
         proxy_config = None
 
         if self.cookies_path:
-            cookie_path = os.path.expanduser(self.cookies_path)
-            cookie_jar = MozillaCookieJar(cookie_path)
+            cookie_jar = MozillaCookieJar(self.cookies_path)
             cookie_jar.load(ignore_discard=True, ignore_expires=True)
             http_client = Session()
             http_client.cookies = cookie_jar
@@ -74,7 +117,7 @@ class YTClient:
             'extract_flat': True
         }
         if self.cookies_path:
-            ydl_opts['cookiefile'] = os.path.expanduser(self.cookies_path)
+            ydl_opts['cookiefile'] = self.cookies_path
         return ydl_opts
 
     def _retry(self, func, video_id):
@@ -168,8 +211,9 @@ class YTClient:
         return videos
 
     def get_full_video_info(self, video_id: str) -> VideoMeta:
+        ydl_opts = self._build_ydl_opts()
+
         def fetch():
-            ydl_opts = self._build_ydl_opts()
             with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                 return ydl.extract_info(f"https://www.youtube.com/watch?v={video_id}", download=False)
         
@@ -189,21 +233,13 @@ class YTClient:
     def download_subtitles(self, video_id: str, output_dir: str) -> Optional[str]:
         try:
             api = self._build_transcript_api()
-            transcript_list = api.list(video_id)
-            print(f"[{video_id}] Available transcripts:", transcript_list)
-            try:
-                transcript = transcript_list.find_transcript(self.languages)
-                print(f"[{video_id}] Using manual transcript")
-            except Exception:
-                transcript = transcript_list.find_generated_transcript(self.languages)
-                print(f"[{video_id}] Using generated transcript")
-            data = transcript.fetch()
+            data = api.fetch(video_id, languages=self.languages)
             formatter = WebVTTFormatter()
             vtt_formatted = formatter.format_transcript(data)
             output_path = os.path.join(output_dir, f"{video_id}.vtt")
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(vtt_formatted)
-            print(f"[{video_id}] ✅ Transcript loaded ({transcript.language_code})")
+            print(f"[{video_id}] ✅ Transcript loaded")
             return output_path
         except Exception as e:
             print(f"[{video_id}] ❌ Transcript error:", e)
