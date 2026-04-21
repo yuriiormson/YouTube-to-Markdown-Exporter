@@ -67,12 +67,15 @@ class YTClient:
         )
 
     def _build_ydl_opts(self):
-        return {
+        ydl_opts = {
             'quiet': True,
             'no_warnings': True,
             'skip_download': True,
             'extract_flat': True
         }
+        if self.cookies_path:
+            ydl_opts['cookiefile'] = os.path.expanduser(self.cookies_path)
+        return ydl_opts
 
     def _retry(self, func, video_id):
         NON_RETRY_ERRORS = [
