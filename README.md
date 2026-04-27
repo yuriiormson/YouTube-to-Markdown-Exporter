@@ -1,13 +1,15 @@
 # YouTube to Markdown Exporter
 
-Цей інструмент дозволяє автоматично знаходити відео на YouTube каналі за ключовим словом (наприклад, "Арестович LIVE"), завантажувати метадані, описи та субтитри (транскрипти), і конвертувати їх у Markdown-формат (з підтримкою YAML Frontmatter). Інструмент має вбудовану SQLite базу даних для відстеження вже оброблених відео, що дозволяє робити інкрементальні оновлення.
+Цей інструмент автоматично знаходить відео на YouTube каналі за фільтрами, завантажує метадані, витягує MP3-аудіо, транскрибує його через Groq-hosted Whisper STT з chunking/overlap, зшиває транскрипт і конвертує результат у Markdown-нотатки для Obsidian. Інструмент має SQLite базу для сумісного відстеження вже оброблених відео та JSON state-файл для resume на рівні audio/chunks/transcription.
 
 ## Вимоги
 - Python 3.10+
 - yt-dlp
+- ffmpeg / ffprobe
 - webvtt-py
 - pydantic
 - pyyaml
+- groq
 
 ## Встановлення
 
@@ -21,6 +23,10 @@
    ```bash
    pip install -r requirements.txt
    ```
+4. Вкажіть Groq API key:
+   ```bash
+   export GROQ_API_KEY="your_groq_api_key"
+   ```
 
 ## Конфігурація
 
@@ -29,13 +35,29 @@
 - `match_filter`: Слово або фраза, яка обов'язково повинна бути в назві відео (наприклад, `Арестович LIVE`). Якщо залишити порожнім, шукатимуться всі відео.
 - `output_dir`: Папка, куди зберігатимуться згенеровані `.md` файли.
 - `db_path`: Шлях до файлу бази даних SQLite.
+- `state_path`: JSON state-файл для resume після переривань.
 - `cookies_path`: Необов'язковий шлях до `cookies.txt` для авторизованих запитів до YouTube. За замовчуванням `null`, тоді скрипт автоматично прочитає cookies з Chrome.
 - `proxy`: Необов'язковий HTTP/HTTPS proxy для обходу IP-блокування, якщо cookies не використовуються. За замовчуванням `null`.
+- `groq_api_key`: Можна залишити `null`; тоді ключ читається з `GROQ_API_KEY`.
+- `groq_model`: Whisper model на Groq, за замовчуванням `whisper-large-v3-turbo`.
+- `transcription_language`: Мова транскрипції (`ru`, `uk`, `en`) або `null` для auto-detect.
+- `chunk_duration_seconds`: Тривалість аудіо-chunk, за замовчуванням `600`.
+- `chunk_overlap_seconds`: Overlap між chunk, за замовчуванням `5`.
+- `max_retries`: Кількість повторів для Groq API.
+- `retry_backoff_seconds`: Базова затримка retry/backoff.
+- `combined_markdown_filename`: Назва об'єднаного Markdown-файлу.
 
 Приклад:
 ```yaml
 cookies_path: null  # Leave null to read cookies from Chrome automatically
 proxy: null  # e.g. "http://user:pass@host:port"
+groq_api_key: null
+groq_model: "whisper-large-v3-turbo"
+transcription_language: null
+chunk_duration_seconds: 600
+chunk_overlap_seconds: 5
+max_retries: 5
+retry_backoff_seconds: 2.0
 ```
 
 ### Автоматична авторизація YouTube
@@ -82,11 +104,24 @@ proxy: null  # e.g. "http://user:pass@host:port"
    python main.py --update
    ```
 
+3. **Resume після переривання**
+   Повторно запустіть ту саму команду. Pipeline пропустить вже витягнуте аудіо, використає наявні chunks або готовий stitched transcript, і продовжить з останнього записаного chunk.
+
+4. **Скидання state**
+   SQLite база та `state.json` зберігаються окремо. Щоб явно скинути JSON resume-state:
+   ```bash
+   python main.py --reset-state
+   ```
+
 ## Структура згенерованих файлів
 
 Для кожного відео створюється `.md` файл, сумісний з Obsidian:
 - YAML Frontmatter (`title`, `source`, `author`, `published`, `created`, `tags`).
 - Embedded YouTube link.
 - Опис відео.
+- Related concepts як Obsidian wiki-links на основі тегів відео.
 - Список таймкодів (якщо знайдені в описі).
-- Транскрипт (згрупований за таймкодами з опису, або одним блоком, якщо таймкоди відсутні).
+- Транскрипт Groq Whisper (згрупований за таймкодами з опису, або одним блоком, якщо таймкоди відсутні).
+- `combined_notes.md` з усіма generated notes в алфавітному порядку.
+
+MP3-файли зберігаються в `output_dir/_audio`. Тимчасові chunk-файли створюються в `output_dir/_chunks` і видаляються після успішної транскрипції. Stitched transcripts зберігаються в `output_dir/_transcripts`, щоб повторні запуски могли пропустити Groq transcription і продовжити Markdown generation.

@@ -11,7 +11,9 @@ class Database:
 
     def _init_db(self):
         # Create directory if it doesn't exist
-        os.makedirs(os.path.dirname(self.db_path), exist_ok=True)
+        db_dir = os.path.dirname(self.db_path)
+        if db_dir:
+            os.makedirs(db_dir, exist_ok=True)
         
         with sqlite3.connect(self.db_path) as conn:
             cursor = conn.cursor()

@@ -27,7 +27,7 @@ TOPIC_MARKERS = [
 
 def split_sentences(text: str):
     sentences = re.split(r'(?<=[.!?])\s+', text)
-    return [s.strip() for s in sentences if len(s.strip()) > 20]
+    return [s.strip() for s in sentences if s.strip()]
 
 def split_topics(sentences):
     topics = []
@@ -92,7 +92,15 @@ class Converter:
         self.output_dir = output_dir
         os.makedirs(self.output_dir, exist_ok=True)
 
-    def generate_markdown(self, video: VideoMeta, grouped_transcript: Dict[str, List[str]], timestamps: List[Tuple[str, str]], has_transcript: bool = False) -> str:
+    def generate_markdown(
+        self,
+        video: VideoMeta,
+        grouped_transcript: Dict[str, List[str]],
+        timestamps: List[Tuple[str, str]],
+        has_transcript: bool = False,
+        transcript_source: str = "groq_whisper",
+        transcript_status: str = None,
+    ) -> str:
         # Fallbacks
         title = video.title or f"Video {video.video_id}"
         description = video.description or "No description available"
@@ -106,8 +114,8 @@ class Converter:
         frontmatter = {
             "title": title,
             "source": video.url,
-            "transcript_status": "available" if has_transcript else "missing",
-            "transcript_source": "transcript_api" if has_transcript else "none",
+            "transcript_status": transcript_status or ("available" if has_transcript else "missing"),
+            "transcript_source": transcript_source if has_transcript else "none",
             "author": "Alexey Arestovych",
             "published": published,
             "description": description,
@@ -127,6 +135,15 @@ class Converter:
         md_lines.append(f"# {title}")
         md_lines.append("## Description")
         md_lines.append(f"{description}\n")
+
+        related_concepts = []
+        for tag in video.tags:
+            tag = tag.strip()
+            if tag:
+                related_concepts.append(f"[[{tag}]]")
+        if related_concepts:
+            md_lines.append("## Related Concepts")
+            md_lines.append(", ".join(related_concepts) + "\n")
 
         # Process grouped transcript
         processed_transcript_lines = []

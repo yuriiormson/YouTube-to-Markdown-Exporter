@@ -10,6 +10,11 @@ from youtube_transcript_api import YouTubeTranscriptApi
 from youtube_transcript_api.formatters import WebVTTFormatter
 from youtube_transcript_api.proxies import GenericProxyConfig
 
+
+class AudioExtractionError(RuntimeError):
+    pass
+
+
 def is_target_video(title: str, description: str, filters: dict, debug: bool = False) -> bool:
     title_lower = title.lower()
     description_lower = (description or "").lower()
@@ -118,6 +123,8 @@ class YTClient:
         }
         if self.cookies_path:
             ydl_opts['cookiefile'] = self.cookies_path
+        if self.proxy:
+            ydl_opts['proxy'] = self.proxy
         return ydl_opts
 
     def _retry(self, func, video_id):
@@ -229,6 +236,47 @@ class YTClient:
             duration=info.get('duration'),
             tags=info.get('tags', [])
         )
+
+    def download_audio(self, video_id: str, output_dir: str) -> str:
+        audio_dir = os.path.join(output_dir, "_audio")
+        os.makedirs(audio_dir, exist_ok=True)
+        mp3_path = os.path.join(audio_dir, f"{video_id}.mp3")
+
+        if os.path.exists(mp3_path) and os.path.getsize(mp3_path) > 0:
+            print(f"[{video_id}] Audio already extracted: {mp3_path}")
+            return mp3_path
+
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'format': 'bestaudio/best',
+            'outtmpl': os.path.join(audio_dir, f"{video_id}.%(ext)s"),
+            'retries': self.retries,
+            'fragment_retries': self.retries,
+            'postprocessors': [
+                {
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '128',
+                }
+            ],
+        }
+        if self.cookies_path:
+            ydl_opts['cookiefile'] = self.cookies_path
+        if self.proxy:
+            ydl_opts['proxy'] = self.proxy
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+        except Exception as e:
+            raise AudioExtractionError(f"Audio extraction failed for {video_id}: {e}") from e
+
+        if not os.path.exists(mp3_path) or os.path.getsize(mp3_path) == 0:
+            raise AudioExtractionError(f"Audio extraction did not create a usable MP3 for {video_id}")
+
+        print(f"[{video_id}] Audio extracted: {mp3_path}")
+        return mp3_path
 
     def download_subtitles(self, video_id: str, output_dir: str) -> Optional[str]:
         try:

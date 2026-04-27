@@ -76,6 +76,57 @@ class Parser:
             return parts[0] * 60 + parts[1]
         return 0
 
+    def seconds_to_timestamp(self, seconds: float) -> str:
+        seconds = max(0, int(seconds))
+        hours = seconds // 3600
+        minutes = (seconds % 3600) // 60
+        secs = seconds % 60
+        return f"{hours:02d}:{minutes:02d}:{secs:02d}"
+
+    def plain_text_to_transcript_lines(self, text: str, duration_seconds: int = None) -> List[TranscriptLine]:
+        """
+        Converts a stitched plain-text transcript into timestamped transcript lines.
+        Groq returns the final clean transcript as text; this keeps downstream grouping
+        compatible with the existing timestamp-based Markdown converter.
+        """
+        text = (text or "").strip()
+        if not text:
+            return []
+
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        chunks = []
+        current = ""
+        for sentence in sentences:
+            sentence = sentence.strip()
+            if not sentence:
+                continue
+            if current and len(current) + len(sentence) > 700:
+                chunks.append(current.strip())
+                current = sentence
+            else:
+                current = f"{current} {sentence}".strip()
+        if current:
+            chunks.append(current.strip())
+
+        if not chunks:
+            chunks = [text]
+
+        total_duration = duration_seconds or max(len(chunks) * 20, 1)
+        seconds_per_chunk = max(total_duration / len(chunks), 1)
+
+        transcript = []
+        for index, chunk_text in enumerate(chunks):
+            start = index * seconds_per_chunk
+            end = min((index + 1) * seconds_per_chunk, total_duration)
+            transcript.append(
+                TranscriptLine(
+                    start_time=self.seconds_to_timestamp(start),
+                    end_time=self.seconds_to_timestamp(end),
+                    text=chunk_text,
+                )
+            )
+        return transcript
+
     def group_transcript_by_timestamps(self, transcript: List[TranscriptLine], timestamps: List[Tuple[str, str]]) -> Dict[str, List[str]]:
         """
         Groups transcript lines into sections based on the timestamps from description.
